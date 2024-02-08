@@ -196,24 +196,17 @@ def compute_affine_rectification(src_img: np.ndarray, lines_vec: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        # print(point00_prime, point01_prime, point10_prime, point11_prime)
-
-        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
-        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
-        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
-        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
-
         x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
         y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
 
-        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
-        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
-        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
-        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
-        sx = 1 / scale
-        sy = 1 / scale
+        scale_x = (x_max - x_min) / (original_width - 1)
+        scale_y = (y_max - y_min) / (original_height - 1)
+        scale = max(scale_x, scale_y)
+        sx = 1 / scale * (1 if point10_prime[0] > 0 else -1)
+        sy = 1 / scale * (1 if point01_prime[1] > 0 else -1)
+        center_point = sx * (x_min + x_max) / 2, sy * (y_min + y_max) / 2
         tx = original_width / 2 - center_point[0]
         ty = original_height / 2 - center_point[1]
 
@@ -280,24 +273,17 @@ def compute_metric_rectification_step2(src_img: np.ndarray, line_vecs: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        # print(point00_prime, point01_prime, point10_prime, point11_prime)
-
-        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
-        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
-        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
-        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
-
         x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
         y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
 
-        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
-        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
-        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
-        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
-        sx = 1 / scale
-        sy = 1 / scale
+        scale_x = (x_max - x_min) / (original_width - 1)
+        scale_y = (y_max - y_min) / (original_height - 1)
+        scale = max(scale_x, scale_y)
+        sx = 1 / scale * (1 if point10_prime[0] > 0 else -1)
+        sy = 1 / scale * (1 if point01_prime[1] > 0 else -1)
+        center_point = sx * (x_min + x_max) / 2, sy * (y_min + y_max) / 2
         tx = original_width / 2 - center_point[0]
         ty = original_height / 2 - center_point[1]
 
@@ -338,6 +324,7 @@ def compute_metric_rectification_one_step(src_img: np.ndarray, line_vecs: list):
     C_inf_star_prime = np.array([[s[0], s[1] / 2, s[3] / 2], [s[1] / 2, s[2], s[4] / 2], [s[3] / 2, s[4] / 2, s[5]]])
     U, S, VT = np.linalg.svd(C_inf_star_prime)
     S[2] = 0
+    S[1] = S[0]
     C_inf_star_prime_approx = U @ np.diag(S) @ VT
 
     H = U
@@ -361,24 +348,17 @@ def compute_metric_rectification_one_step(src_img: np.ndarray, line_vecs: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        # print(point00_prime, point01_prime, point10_prime, point11_prime)
-
-        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
-        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
-        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
-        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
-
         x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
         y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
         y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
 
-        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
-        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
-        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
-        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
-        sx = 1 / scale
-        sy = 1 / scale
+        scale_x = (x_max - x_min) / (original_width - 1)
+        scale_y = (y_max - y_min) / (original_height - 1)
+        scale = max(scale_x, scale_y)
+        sx = 1 / scale * (1 if point10_prime[0] > 0 else -1)
+        sy = 1 / scale * (1 if point01_prime[1] > 0 else -1)
+        center_point = sx * (x_min + x_max) / 2, sy * (y_min + y_max) / 2
         tx = original_width / 2 - center_point[0]
         ty = original_height / 2 - center_point[1]
 
@@ -422,6 +402,10 @@ def compute_homography_error(src, dst, homography):
     d = np.zeros(src.shape[0], np.float64)
 
     """ YOUR CODE STARTS HERE """
+    src_prime = transform_homography(src, homography)
+    d = d + np.linalg.norm(dst - src_prime, axis=1) ** 2
+    dst_prime = transform_homography(dst, np.linalg.inv(homography))
+    d = d + np.linalg.norm(src - dst_prime, axis=1) ** 2
 
     """ YOUR CODE ENDS HERE """
 
@@ -457,7 +441,28 @@ def compute_homography_ransac(src, dst, thresh=16.0, num_tries=200):
     mask = np.ones(src.shape[0], dtype=np.bool)
 
     """ YOUR CODE STARTS HERE """
+    max_inliners = 0
+    eps = 1e-5
 
+    def collinear(p1, p2, p3):
+        return abs(np.cross(p2 - p1, p3 - p1)) < eps
+
+    for i in range(num_tries):
+        while True:
+            indices = np.random.choice(src.shape[0], 4, replace=True)
+            if collinear(src[0], src[1], src[2]) or collinear(src[0], src[1], src[3]) or collinear(src[0], src[2], src[3]) or collinear(src[1], src[2], src[3]):
+                continue
+            else:
+                break
+
+        H = compute_homography(src[indices], dst[indices])
+        d = compute_homography_error(src, dst, H)
+        mask_new = d < thresh
+        inliners = np.sum(mask_new)
+        if inliners > max_inliners:
+            max_inliners = inliners
+            mask = mask_new
+            h_matrix = H
     """ YOUR CODE ENDS HERE """
 
     return h_matrix, mask
