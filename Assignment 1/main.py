@@ -141,10 +141,9 @@ def warp_image(src, dst, h_matrix):
 
     map_x = dst_transformed_coords[:, 0].reshape(h_dst, w_dst).astype(np.float32)
     map_y = dst_transformed_coords[:, 1].reshape(h_dst, w_dst).astype(np.float32)
-    src_transformed = cv2.remap(src, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
+    src_transformed = cv2.remap(src, map_x, map_y, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT,
+                                dst=dst)
     mask = np.any(src_transformed != [0, 0, 0], axis=-1)
-
-    # Use the mask to combine src_transformed and dst
     dst[mask] = src_transformed[mask]
 
     """ YOUR CODE ENDS HERE """
@@ -171,8 +170,50 @@ def compute_affine_rectification(src_img: np.ndarray, lines_vec: list):
     dst = np.zeros_like(src_img)  # deep copy to avoid overwriting the original image
     Hp = np.zeros((3, 3))
     """ YOUR CODE STARTS HERE """
+    point0, point1 = lines_vec[0].intersetion_point(lines_vec[1]), lines_vec[2].intersetion_point(lines_vec[3])
+    l_inf = Line_Equation(point0, point1)
 
-    dst = warp_image(src_img, dst, Hp)
+    print(point0.coordinate, point1.coordinate, l_inf)
+    Hp = np.array([[1, 0, -l_inf[0] / l_inf[2]], [0, 1, -l_inf[1] / l_inf[2]], [0, 0, 1 / l_inf[2]]]).T
+
+    Hp_prime = np.linalg.inv(Hp)
+
+    def construct_hs(H, original_width, original_height):
+
+        point00 = np.array([0, 0, 1])
+        point10 = np.array([original_width - 1, 0, 1])
+        point01 = np.array([0, original_height - 1, 1])
+        point11 = np.array([original_width - 1, original_height - 1, 1])
+
+        point00_prime = H @ point00
+        point01_prime = H @ point01
+        point10_prime = H @ point10
+        point11_prime = H @ point11
+
+        point00_prime = point00_prime / point00_prime[2]
+        point01_prime = point01_prime / point01_prime[2]
+        point10_prime = point10_prime / point10_prime[2]
+        point11_prime = point11_prime / point11_prime[2]
+
+        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+
+        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1))
+        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
+        sx = 1 / scale
+        sy = 1 / scale
+        tx = original_width / 2 - center_point[0]
+        ty = original_height / 2 - center_point[1]
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
+
+        return Ha
+
+    Hs_after = construct_hs(Hp_prime, dst.shape[1], dst.shape[0])
+
+    dst = warp_image(src_img, dst, Hs_after @ Hp_prime)
+    # dst = warp_image(src_img, dst, Hp_prime)
     """ YOUR CODE ENDS HERE """
 
     return dst
@@ -194,8 +235,57 @@ def compute_metric_rectification_step2(src_img: np.ndarray, line_vecs: list):
     '''
     dst = np.zeros_like(src_img)  # deep copy to avoid overwriting the original image
     Ha = np.zeros((3, 3))
+
     """ YOUR CODE STARTS HERE """
-    dst = warp_image(src_img, dst, Ha)
+    A = np.stack([[line_vecs[0].vec_para[0] * line_vecs[1].vec_para[0],
+                   line_vecs[0].vec_para[1] * line_vecs[1].vec_para[0] + line_vecs[0].vec_para[0] *
+                   line_vecs[1].vec_para[1], line_vecs[0].vec_para[1] * line_vecs[1].vec_para[1]],
+                  [line_vecs[2].vec_para[0] * line_vecs[3].vec_para[0],
+                   line_vecs[2].vec_para[1] * line_vecs[3].vec_para[0] + line_vecs[2].vec_para[0] *
+                   line_vecs[3].vec_para[1], line_vecs[2].vec_para[1] * line_vecs[3].vec_para[1]]])
+    U, S, VT = np.linalg.svd(A)
+    s = VT.T[:, -1]  # transpose of V
+    KKT = np.array([[s[0], s[1]], [s[1], s[2]]])
+    K = np.linalg.cholesky(KKT)
+    Ha = np.array([[K[0, 0], K[0, 1], 0], [K[1, 0], K[1, 1], 0], [0, 0, 1]])
+    inv_Ha = np.linalg.inv(Ha)
+
+    print(K, K.T, K @ K.T, KKT, sep='\n')
+
+    def construct_hs(H, original_width, original_height):
+
+        point00 = np.array([0, 0, 1])
+        point10 = np.array([original_width - 1, 0, 1])
+        point01 = np.array([0, original_height - 1, 1])
+        point11 = np.array([original_width - 1, original_height - 1, 1])
+
+        point00_prime = H @ point00
+        point01_prime = H @ point01
+        point10_prime = H @ point10
+        point11_prime = H @ point11
+
+        point00_prime = point00_prime / point00_prime[2]
+        point01_prime = point01_prime / point01_prime[2]
+        point10_prime = point10_prime / point10_prime[2]
+        point11_prime = point11_prime / point11_prime[2]
+
+        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+
+        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1))
+        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
+        sx = 1 / scale
+        sy = 1 / scale
+        tx = original_width / 2 - center_point[0]
+        ty = original_height / 2 - center_point[1]
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
+
+        return Ha
+
+    Hs_after = construct_hs(inv_Ha, dst.shape[1], dst.shape[0])
+    dst = warp_image(src_img, dst, Hs_after @ inv_Ha)
     """ YOUR CODE ENDS HERE """
 
     return dst
@@ -217,8 +307,74 @@ def compute_metric_rectification_one_step(src_img: np.ndarray, line_vecs: list):
     H = np.zeros((3, 3))
 
     """ YOUR CODE STARTS HERE """
+    A = np.zeros((5, 6))
+    for i in range(5):
+        a, b, c = line_vecs[2 * i].vec_para
+        d, e, f = line_vecs[2 * i + 1].vec_para
+        A[i] = [a * d, (b * d + a * e) / 2, b * e, (a * f + c * d) / 2, (b * f + c * e) / 2, f * c]
 
-    dst = warp_image(src_img, dst, H)
+    U, S, VT = np.linalg.svd(A)
+    print(S)
+    s = VT.T[:, -1]
+    C_inf_star_prime = np.array([[s[0], s[1] / 2, s[3] / 2], [s[1] / 2, s[2], s[4] / 2], [s[3] / 2, s[4] / 2, s[5]]])
+
+    U, S, VT = np.linalg.svd(C_inf_star_prime)
+    C_inf_star = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 0]])
+    S[2] = 1
+    H = U @ np.diag(np.sqrt(S))
+    inv_H = np.linalg.inv(H)
+
+    def construct_hs(H, original_width, original_height):
+
+        point00 = np.array([0, 0, 1])
+        point10 = np.array([original_width - 1, 0, 1])
+        point01 = np.array([0, original_height - 1, 1])
+        point11 = np.array([original_width - 1, original_height - 1, 1])
+
+        print(point00, point01, point10, point11)
+
+        point00_prime = H @ point00
+        point01_prime = H @ point01
+        point10_prime = H @ point10
+        point11_prime = H @ point11
+
+        point00_prime = point00_prime / point00_prime[2]
+        point01_prime = point01_prime / point01_prime[2]
+        point10_prime = point10_prime / point10_prime[2]
+        point11_prime = point11_prime / point11_prime[2]
+
+        print(point00_prime, point01_prime, point10_prime, point11_prime)
+
+        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
+        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+
+        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1)) * 5
+        center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
+        sx = 1 / scale
+        sy = 1 / scale
+        tx = 0
+        ty = 0
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
+
+        return Ha
+
+    Hs_after = construct_hs(inv_H, dst.shape[1], dst.shape[0])
+    print(np.linalg.det(inv_H), np.linalg.det(Hs_after))
+
+    src_img[0, :, :] = 255
+    src_img[-1, :, :] = 255
+    src_img[:, 0, :] = 255
+    src_img[:, -1, :] = 255
+
+    dst = warp_image(src_img, dst, Hs_after @ inv_H)
+
+    def _show_images(image: np.ndarray, win_name: str):
+        cv2.namedWindow(win_name, 0)
+        cv2.imshow(win_name, image)
+
+    _show_images(dst, 'dst')
     """ YOUR CODE ENDS HERE """
 
     return dst
