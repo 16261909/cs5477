@@ -173,17 +173,18 @@ def compute_affine_rectification(src_img: np.ndarray, lines_vec: list):
     point0, point1 = lines_vec[0].intersetion_point(lines_vec[1]), lines_vec[2].intersetion_point(lines_vec[3])
     l_inf = Line_Equation(point0, point1)
 
-    print(point0.coordinate, point1.coordinate, l_inf)
+    # print(point0.coordinate, point1.coordinate, l_inf)
     Hp = np.array([[1, 0, -l_inf[0] / l_inf[2]], [0, 1, -l_inf[1] / l_inf[2]], [0, 0, 1 / l_inf[2]]]).T
 
     Hp_prime = np.linalg.inv(Hp)
 
     def construct_hs(H, original_width, original_height):
-
         point00 = np.array([0, 0, 1])
         point10 = np.array([original_width - 1, 0, 1])
         point01 = np.array([0, original_height - 1, 1])
         point11 = np.array([original_width - 1, original_height - 1, 1])
+
+        # print(point00, point01, point10, point11)
 
         point00_prime = H @ point00
         point01_prime = H @ point01
@@ -195,19 +196,28 @@ def compute_affine_rectification(src_img: np.ndarray, lines_vec: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
-        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        # print(point00_prime, point01_prime, point10_prime, point11_prime)
 
-        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1))
+        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
+        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
+        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
+        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
+
+        x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+        y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+
+        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
+        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
+        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
         center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
         sx = 1 / scale
         sy = 1 / scale
         tx = original_width / 2 - center_point[0]
         ty = original_height / 2 - center_point[1]
-        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
 
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
         return Ha
 
     Hs_after = construct_hs(Hp_prime, dst.shape[1], dst.shape[0])
@@ -250,14 +260,15 @@ def compute_metric_rectification_step2(src_img: np.ndarray, line_vecs: list):
     Ha = np.array([[K[0, 0], K[0, 1], 0], [K[1, 0], K[1, 1], 0], [0, 0, 1]])
     inv_Ha = np.linalg.inv(Ha)
 
-    print(K, K.T, K @ K.T, KKT, sep='\n')
+    # print(K, K.T, K @ K.T, KKT, sep='\n')
 
     def construct_hs(H, original_width, original_height):
-
         point00 = np.array([0, 0, 1])
         point10 = np.array([original_width - 1, 0, 1])
         point01 = np.array([0, original_height - 1, 1])
         point11 = np.array([original_width - 1, original_height - 1, 1])
+
+        # print(point00, point01, point10, point11)
 
         point00_prime = H @ point00
         point01_prime = H @ point01
@@ -269,19 +280,28 @@ def compute_metric_rectification_step2(src_img: np.ndarray, line_vecs: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
-        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        # print(point00_prime, point01_prime, point10_prime, point11_prime)
 
-        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1))
+        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
+        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
+        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
+        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
+
+        x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+        y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+
+        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
+        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
+        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
         center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
         sx = 1 / scale
         sy = 1 / scale
         tx = original_width / 2 - center_point[0]
         ty = original_height / 2 - center_point[1]
-        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
 
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
         return Ha
 
     Hs_after = construct_hs(inv_Ha, dst.shape[1], dst.shape[0])
@@ -314,24 +334,22 @@ def compute_metric_rectification_one_step(src_img: np.ndarray, line_vecs: list):
         A[i] = [a * d, (b * d + a * e) / 2, b * e, (a * f + c * d) / 2, (b * f + c * e) / 2, f * c]
 
     U, S, VT = np.linalg.svd(A)
-    print(S)
     s = VT.T[:, -1]
     C_inf_star_prime = np.array([[s[0], s[1] / 2, s[3] / 2], [s[1] / 2, s[2], s[4] / 2], [s[3] / 2, s[4] / 2, s[5]]])
-
     U, S, VT = np.linalg.svd(C_inf_star_prime)
-    C_inf_star = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 0]])
-    S[2] = 1
-    H = U @ np.diag(np.sqrt(S))
+    S[2] = 0
+    C_inf_star_prime_approx = U @ np.diag(S) @ VT
+
+    H = U
     inv_H = np.linalg.inv(H)
 
     def construct_hs(H, original_width, original_height):
-
         point00 = np.array([0, 0, 1])
         point10 = np.array([original_width - 1, 0, 1])
         point01 = np.array([0, original_height - 1, 1])
         point11 = np.array([original_width - 1, original_height - 1, 1])
 
-        print(point00, point01, point10, point11)
+        # print(point00, point01, point10, point11)
 
         point00_prime = H @ point00
         point01_prime = H @ point01
@@ -343,38 +361,43 @@ def compute_metric_rectification_one_step(src_img: np.ndarray, line_vecs: list):
         point10_prime = point10_prime / point10_prime[2]
         point11_prime = point11_prime / point11_prime[2]
 
-        print(point00_prime, point01_prime, point10_prime, point11_prime)
+        # print(point00_prime, point01_prime, point10_prime, point11_prime)
 
-        x_min = min(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        x_max = max(point00_prime[0], point01_prime[0], point10_prime[0], point11_prime[0])
-        y_min = min(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
-        y_max = max(point00_prime[1], point01_prime[1], point10_prime[1], point11_prime[1])
+        y_max_scale = point01_prime[1] if abs(point01_prime[1]) > abs(point11_prime[1]) else point11_prime[1]
+        y_min_scale = point00_prime[1] if abs(point00_prime[1]) < abs(point10_prime[1]) else point10_prime[1]
+        x_max_scale = point10_prime[0] if abs(point10_prime[0]) > abs(point11_prime[0]) else point11_prime[0]
+        x_min_scale = point00_prime[0] if abs(point00_prime[0]) < abs(point01_prime[0]) else point01_prime[0]
 
-        scale = max((x_max - x_min) / (original_width - 1), (y_max - y_min) / (original_height - 1)) * 5
+        x_max = max(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        x_min = min(point01_prime[0], point11_prime[0], point10_prime[0], point00_prime[0])
+        y_max = max(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+        y_min = min(point01_prime[1], point11_prime[1], point10_prime[1], point00_prime[1])
+
+        scale_x = (x_max_scale - x_min_scale) / (original_width - 1)
+        scale_y = (y_max_scale - y_min_scale) / (original_height - 1)
+        scale = scale_x if abs(scale_x) > abs(scale_y) else scale_y
         center_point = (x_min + x_max) / (2 * scale), (y_min + y_max) / (2 * scale)
         sx = 1 / scale
         sy = 1 / scale
-        tx = 0
-        ty = 0
-        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
+        tx = original_width / 2 - center_point[0]
+        ty = original_height / 2 - center_point[1]
 
+        Ha = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
         return Ha
 
     Hs_after = construct_hs(inv_H, dst.shape[1], dst.shape[0])
-    print(np.linalg.det(inv_H), np.linalg.det(Hs_after))
-
-    src_img[0, :, :] = 255
-    src_img[-1, :, :] = 255
-    src_img[:, 0, :] = 255
-    src_img[:, -1, :] = 255
+    # print(np.linalg.det(inv_H), np.linalg.det(Hs_after))
+    #
+    # src_img[0, :, :] = 255
+    # src_img[1, :, :] = 255
+    # src_img[-1, :, :] = 255
+    # src_img[:, 0, :] = 255
+    # src_img[:, 1, :] = 255
+    # src_img[:, -1, :] = 255
+    #
+    # print(H)
 
     dst = warp_image(src_img, dst, Hs_after @ inv_H)
-
-    def _show_images(image: np.ndarray, win_name: str):
-        cv2.namedWindow(win_name, 0)
-        cv2.imshow(win_name, image)
-
-    _show_images(dst, 'dst')
     """ YOUR CODE ENDS HERE """
 
     return dst

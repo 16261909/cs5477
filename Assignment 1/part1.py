@@ -253,10 +253,10 @@ def main():
        will be save to the path 'data/*.csv' by default. 
     '''
     # step 1: Affinely rectified
-    affined_image=_affinely_rectified_test(image_ori,image_name=image_name)
+    # affined_image=_affinely_rectified_test(image_ori,image_name=image_name)
 
     # # step 2: Metric rectified
-    rectified_image1=_metric_rectified_twostep_test(image=affined_image,image_name=image_name)
+    # rectified_image1=_metric_rectified_twostep_test(image=affined_image,image_name=image_name)
 
     # Metric rectification (One-step)
     rectified_image2 =_metric_rectified_onestep_test(image=image_ori,image_name=image_name)
