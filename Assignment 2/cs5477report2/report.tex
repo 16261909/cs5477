@@ -1,0 +1,58 @@
+\input{preamble.tex}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{comment}
+\usepackage{natbib}
+\usepackage{bbm}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+\usepackage{appendix}
+\usepackage{csquotes}
+\usepackage{titlesec}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{subcaption}
+\usepackage{subfig}
+\usepackage{floatrow}
+\usepackage{float}
+\lstset{
+    frame = single,
+    breaklines=true,
+    basicstyle=\ttfamily}
+\usepackage{tikz, forest}
+\usepackage{natbib}
+
+\DeclareMathOperator*{\maximize}{maximize}
+\DeclareMathOperator*{\minimize}{minimize}
+
+
+\begin{document}
+
+\header{Assignment 2}{Zhang Rongqi}{A0276566M}
+
+\section{Implementation}
+
+\begin{itemize}
+    \item \texttt{detect\_lines()}: Followed the instructions to call \texttt{cv2.Canny} and \texttt{cv2.HoughLines} to automatically get horizontal and vertical lines. Number of Lines is $O(L)$.
+    
+    \item \texttt{get\_lines\_from\_line\_pts()}: Simply do the cross product of each pair of points, and then do the normalization. Time complexity: $O(1)$.
+    
+    \item \texttt{get\_pairwise\_intersections()}: Iterate each pair of lines from the list of lines and do the cross product to get their intersection and save the result in a list. If the scale factor of the intersection equals $0$, meaning they are parallel lines, skip adding it to the list. Number of points is $O(P)=O(L^2)$. Time complexity: $O(L^2)$.
+    
+    \item \texttt{get\_support\_mtx()}: From the pairwise intersections and lines, compute the support matrix between the intersections and the lines if the distance between the intersection and line is within the distance threshold. Use $d = \frac{|Ax + By + C|}{\sqrt{A^{2} + B^{2}}}$ to calculate the distance between the line $l=(A,B,C)^T$ and the point $p=(x,y,1)^T$. Time complexity: $O(PL)=O(L^3)$.
+    
+    \item \texttt{get\_vanishing\_pts()}: For each of the $n$ loops, find the point with maximum supporting lines. And remove these lines to avoid them supporting another vanishing point. Time complexity: $O(nPL)$.
+    
+    \item \texttt{get\_vanishing\_line()}: Simply do the cross product of each pair of points, and then do the normalization. Time complexity: $O(1)$.
+    
+    \item \texttt{get\_target\_height()}: First, find the horizontal and vertical vanishing points. Then project $t_2$ onto $t_{1}b_{1}$ to get $\Tilde{t}_2$. Then take the norm of vectors on $t_{1}b_{1}$ to get their distance ratio in the real world. Time complexity: $O(1)$.
+
+\end{itemize}
+
+\section{Result}
+
+Intermediate results I get are the same as the TA's. Due to space limitations, the results will not be displayed. Final result: \texttt{INFO: the target height is 3.44m.}
+
+\end{document}
+
+\end{document}
