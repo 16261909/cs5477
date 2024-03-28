@@ -1,0 +1,10 @@
+name: cs5477
+channels:
+  - conda-forge
+dependencies:
+  - jupyterlab
+  - k3d
+  - matplotlib
+  - numpy
+  - opencv-python
+  - scipy>=1.4

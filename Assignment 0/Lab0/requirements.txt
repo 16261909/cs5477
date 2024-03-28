@@ -1,0 +1,6 @@
+jupyterlab
+k3d
+matplotlib
+numpy
+opencv-python
+scipy>=1.4
