@@ -119,6 +119,10 @@ def detect_keypoints(image_file: os.path):
     Detect keypoints using cv2.SIFT_create() and sift.detectAndCompute
     """
 
+    image = cv2.imread(image_file)
+    sift = cv2.SIFT_create()
+    keypoints, descriptors = sift.detectAndCompute(image, None)
+
     """ END YOUR CODE HERE. """
 
     keypoints = [encode_keypoint(kp=kp) for kp in keypoints]
@@ -165,6 +169,11 @@ def create_feature_matches(image_file1: os.path, image_file2: os.path, lowe_rati
     1. Run cv.BFMatcher() and matcher.knnMatch(descriptors1, descriptors2, 2)
     2. Filter the feature matches using the Lowe ratio test.
     """
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(descriptors1, descriptors2, 2)
+    for m, n in matches:
+        if m.distance < lowe_ratio * n.distance:
+            good_matches.append([m])
 
     """ END YOUR CODE HERE. """
     if len(good_matches) < min_matches:
@@ -235,9 +244,12 @@ def create_ransac_matches(image_file1: os.path, image_file2: os.path,
     essential_mtx = np.zeros(shape=[3,3], dtype=float)
     """ 
     YOUR CODE HERE 
-    Perform goemetric verification by finding the essential matrix between keypoints in the first image and keypoints in
+    Perform geometric verification by finding the essential matrix between keypoints in the first image and keypoints in
     the second image using cv2.findEssentialMatrix(..., method=cv2.RANSAC, threshold=ransac_threshold, ...)
     """
+
+    essential_mtx, mask = cv2.findEssentialMat(points1, points2, camera_intrinsics, method=cv2.RANSAC, threshold=ransac_threshold)
+    is_inlier = mask.ravel()
 
     """ END YOUR CODE HERE """
 
@@ -272,6 +284,16 @@ def create_scene_graph(image_files: list, min_num_inliers: int = 40):
     Add edges to <graph> if the minimum number of geometrically verified inliers between images is at least  
     <min_num_inliers> 
     """
+    for i, file1 in enumerate(image_files):
+        for j, file2 in enumerate(image_files):
+            if i >= j:
+                continue
+            match_id = create_ransac_matches(image_file1=file1, image_file2=file2)
+            match_file = os.path.join(RANSAC_MATCH_DIR, match_id + '.npy')
+            if os.path.exists(match_file):
+                matches = np.load(match_file)
+                if matches.shape[0] >= min_num_inliers:
+                    graph.add_edge(i, j)
 
     """ END YOUR CODE HERE """
 

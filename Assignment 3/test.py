@@ -104,6 +104,7 @@ def check_npy_file(file_path, func):
     ta = func(file_path.replace("predictions", "ta-results"))
     prd = func(file_path)
 
+
     match = np.allclose(ta, prd, rtol=1e-04)
     file_name = os.path.basename(file_path)
     print("- {:30s}: {}".format(file_name, match))
