@@ -248,8 +248,7 @@ def create_ransac_matches(image_file1: os.path, image_file2: os.path,
     the second image using cv2.findEssentialMatrix(..., method=cv2.RANSAC, threshold=ransac_threshold, ...)
     """
 
-    essential_mtx, mask = cv2.findEssentialMat(points1, points2, camera_intrinsics, method=cv2.RANSAC, threshold=ransac_threshold)
-    is_inlier = mask.ravel()
+    essential_mtx, is_inlier = cv2.findEssentialMat(points1, points2, camera_intrinsics, method=cv2.RANSAC, threshold=ransac_threshold)
 
     """ END YOUR CODE HERE """
 

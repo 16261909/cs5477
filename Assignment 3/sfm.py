@@ -240,7 +240,7 @@ def solve_pnp(image_id: str, point2d_idxs: np.ndarray, all_points3d: np.ndarray,
         retval, rotationvec, tvec = cv2.solvePnP(objectPoints=selected_pts3d, imagePoints=selected_pts2d,
                                          cameraMatrix=intrinsics, distCoeffs=None, flags=cv2.SOLVEPNP_ITERATIVE)
         rotation_mtx, _ = cv2.Rodrigues(rotationvec)
-        residuals = get_reprojection_residuals(points2d=selected_pts2d, points3d=selected_pts3d,
+        residuals = get_reprojection_residuals(points2d=points2d, points3d=points3d,
                                                 intrinsics=intrinsics, rotation_mtx=rotation_mtx, tvec=tvec)
 
         """ END YOUR CODE HERE """
