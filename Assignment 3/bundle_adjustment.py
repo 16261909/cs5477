@@ -1,3 +1,6 @@
+# Name: Zhang Rongqi
+# Student ID: A0276566M
+
 import numpy as np
 import cv2
 

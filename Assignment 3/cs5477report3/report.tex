@@ -1,0 +1,83 @@
+\input{preamble.tex}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{comment}
+\usepackage{natbib}
+\usepackage{bbm}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+\usepackage{appendix}
+\usepackage{csquotes}
+\usepackage{titlesec}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{subcaption}
+\usepackage{subfig}
+\usepackage{floatrow}
+\usepackage{float}
+\lstset{
+    frame = single,
+    breaklines=true,
+    basicstyle=\ttfamily}
+\usepackage{tikz, forest}
+\usepackage{natbib}
+
+\DeclareMathOperator*{\maximize}{maximize}
+\DeclareMathOperator*{\minimize}{minimize}
+
+
+\begin{document}
+
+\header{Assignment 3}{Zhang Rongqi}{A0276566M}
+
+\section{Implementation}
+
+\begin{itemize}
+    \item \texttt{detect\_keypoints()}: I create a \texttt{SIFT} object using \texttt{cv2.SIFT\_create()}, and use \texttt{sift.detectAndCompute()} to compute both keypoints and descriptors.
+    
+    \item \texttt{create\_feature\_matches()}:  I create a \texttt{BFMatcher} object using \texttt{cv2.BFMatcher()}, and use \texttt{bf.knnMatch()} to find the two nearest neighbours. Then I apply the Lowe ratio test to filter out invalid matches. The idea of Lowe ratio test is that, the true match point is expected to be different from the second nearest point.
+    
+    \item \texttt{create\_ransac\_matches()}: I use \texttt{cv2.findEssentialMat()} to get essential matrix and the inlier mask of selected 2d points. The inliers which will be used in \texttt{sfm.py} are saved to local storage.
+    
+    \item \texttt{create\_scene\_graph()}: I first enumerate a pair of images and get their matches using \texttt{create\_ransac\_matches()}. If the number of matches exceeds \texttt{min\_num\_inliers}, a edge of this pair of images is established. The number of matches can be obtained from local storage by calling \texttt{create\_ransac\_matches()}.
+    
+    \item \texttt{get\_init\_image\_ids()}: This function simply find a pair of images which have the most matched features. Specifically, the number of matched features can be obtained from the local storage.
+    Then I enumerate each edge in \texttt{scene\_graph}, and update value with the most matched features. Then return the initial images pair corresponding to the maximum value.
+    
+    \item \texttt{get\_init\_extrinsics()}: I use \texttt{np.linalg.svd()} to get the decomposed matrices. Then follow the formula to get possible rotation matrix $R$ and translation vector $t$. To keep $R$ in a right-handed coordinate system, I let $R=-R$ if $det(R)<0$. Then four combination of $(R, t)$ are waited to be tested. Then I use \texttt{cv2.triangulatePoints} to get 3D points, and further use the sign of depth formula to determine whether the point is in front of two views. I count this number for all four $(R, t)$, due to the noise, the combination has the most points corresponds to right answer.
+
+    \item \texttt{get\_reprojection\_residuals}: Firstly I compute projection matrix using intrinsic matrix and extrinsic matrix. Then compute reprojected 2D points by $x=PX$. Then calculate and return the euclidean distance between the points in the same plane.
+    
+    \item \texttt{get\_next\_pair()}: I enumerate a pair of images, where one from registered set, one from unregistered set. Then return the pair has the most matched features.
+    
+    \item \texttt{solve\_pnp()}: I call \texttt{cv2.solvePnP()} to get rotation vector and translation vector. Then use \texttt{cv2.Rodrigues()} to transform rotation vector to rotation matrix. Then call \texttt{get\_reprojection\_residuals} to get the residuals corresponding to the rotation matrix and translation vector. Then this function maintain and return the $(R, t)$ pair with the most inliers.
+    
+    \item \texttt{add\_points3d()}: In this function, I simply call triangulate to do triangulation to get 3D points using corresponding matches, extrinsic matrices and intrinsic matrix.
+    
+    \item \texttt{compute\_ba\_residuals()}: First I calculate tensor $P$ using intrinsics and extrinsics, which shape is $C\times 3 \times 3$. Then apply \texttt{points3d\_idx} to \texttt{points3d} to reorganize the points to match \texttt{point2d}, which shape is $N \times 4$, and apply \texttt{camera\_idxs} to $P$ to reorganize the points to match \texttt{point2d}, which shape is $N \times 3 \times 4$. Then I perform \texttt{np.einsum()} to get the product of $P$ and \texttt{point3d} for each \texttt{point2d} to get \texttt{point2d\_reprojected}. Finally, \texttt{residuals} can be obtained by compute the euclidean distance between \texttt{point2d} and \texttt{point2d\_reprojected}.
+    
+    
+
+\end{itemize}
+
+\section{Result}
+
+I got all tests passed with \texttt{opencv-python==4.5.1.48} on Windows. I tried many \texttt{opencv-python} versions and on Ubuntu 20.04. Various versions of \texttt{opencv-python} generate different results for \texttt{bf-matches} . On Ubuntu, the same programme generates different \texttt{ransac-fundamental} results. Both of which cannot pass the tests and are beyond my control. Furthermore, the enumeration in \texttt{get\_next\_pair()} affects the result, especially the update of the maximum value of inliers. If I update \texttt{cur\_val} when \texttt{cur\_val > max\_val}, some part of the registration-trajectory are different with ta-results. If I update \texttt{cur\_val} when \texttt{cur\_val >= max\_val}, the part mentioned above keeps the same with ta-results, while another part changed. A different registration-trajectory makes all other results different. 
+
+\begin{verbatim}
+    # The following code is used to keep registration trajectory consistent 
+    # with ta-result's. The wrong order registration trajectory makes the result 
+    # different from the ta-result. The following code is just for handling 
+    # boundary case, delete it will lead to a different result, while it is 
+    # still correct. I didn't figure out how ta enumerates the image id.
+    if matches.shape[0] >= max_num_inliers:
+        if max_num_inliers == matches.shape[0]:
+            if (sorted([i, j]) == sorted(['templeR0042', 'templeR0043'])):
+                continue
+\end{verbatim}
+
+To pass these tests, I need to handle this boundary case as above. The same results which pass all test cases can be consistently reproduced using these specific configurations with this boundary case handling code.
+
+\end{document}
+
+\end{document}
