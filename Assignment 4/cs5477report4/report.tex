@@ -1,0 +1,56 @@
+\input{preamble.tex}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{comment}
+\usepackage{natbib}
+\usepackage{bbm}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+\usepackage{appendix}
+\usepackage{csquotes}
+\usepackage{titlesec}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{subcaption}
+\usepackage{subfig}
+\usepackage{floatrow}
+\usepackage{float}
+\lstset{
+    frame = single,
+    breaklines=true,
+    basicstyle=\ttfamily}
+\usepackage{tikz, forest}
+\usepackage{natbib}
+
+\DeclareMathOperator*{\maximize}{maximize}
+\DeclareMathOperator*{\minimize}{minimize}
+
+
+\begin{document}
+
+\header{Assignment 4}{Zhang Rongqi}{A0276566M}
+
+\section{Implementation}
+
+\begin{itemize}
+    \item \texttt{get\_plane\_sweep\_homographies()}: In this function, a list of homograph matrices are computed. Firstly I recover the $\textbf{R}$ and $\textbf{C}$ from \texttt{relative\_pose} matrix, specifically, $\textbf{M}_{rel} = [\textbf{R}^\intercal|\textbf{R}^\intercal \textbf{C}]$ (don't know why it is not $[\textbf{R}^\intercal|-\textbf{R}^\intercal \textbf{C}]$). In this case, $\mathbf{K}=\mathbf{K}_{ref}$ and $\textbf{n}=(0,0,1)^\intercal$. Then \texttt{homographies} is calculated by $\mathbf{K}(\mathbf{R}^\intercal + \frac{\mathbf{R}^\intercal \mathbf{C} \mathbf{n}^\intercal}{d})\mathbf{K}^{-1}$
+
+.
+    
+    \item \texttt{compute\_plane\_sweep\_volume()}: In this function, I iterate each $(D, H, W)$ pixel and depth in the reference coordinate. Firstly, I used \texttt{concat\_extrinsic\_matrix(\\
+    ref\_pose, invert\_extrinsic(images[i].pose\_mat))} to calculate \texttt{relative\_pose} (don't know why it is not \texttt{concat\_extrinsic\_matrix(images[i].pose\_mat, \\
+    invert\_extrinsic(ref\_pose))}). Then this \texttt{relative\_pose} can be used in \\
+    \texttt{get\_plane\_sweep\_homographies()}. Then the calculated \texttt{homographies} is used to call \texttt{cv2.warpPerspective()} to get \texttt{warped\_images} and \texttt{warped\_maskes}. \\ \texttt{warped\_maskes} are used to update \texttt{accum\_count}. Two iterations are used to calculate the mean and variance (\texttt{ps\_volume}) for the same pixel and depth of \texttt{warped\_images}, respectively.
+
+    \item \texttt{compute\_depths()}: In this function, I simply picked the depth which corresponds to the minimal variance.
+    
+    \item \texttt{post\_process()}: Firstly, I utilized \texttt{scipy.ndimage.median\_filter()} to smooth \texttt{ps\_volume}. I set the window size to $(1,5,5)$ because I only intend to smooth images at the same depth, while images at different depths should remain unaltered. Then, I set \texttt{accum\_threshold} and \texttt{variance\_threshold} to filter out unreliable choices. Specifically, I iterate over all pixels to verify if \texttt{smooth\_ps\_volume} and \texttt{accum\_threshold} meet these criteria.
+
+
+    \item \texttt{unproject\_depth\_map()}: Firstly I checked the parameter \texttt{mask} exists or not. If not \texttt{mask} is initialized as all one. Then I used \texttt{np.meshgrid()} to get all the indices, and used the \texttt{mask} to filter the unreliable indices. In this case, the projective matrix is simply set as $\textbf{K}[\textbf{I}|\textbf{0}]$. So 3D points can be calculated by $\texttt{points3d} = \textbf{K}^{-1}(x, y, 1)^\intercal$, where the depth of \texttt{points3d} is corresponding reciprocal of \texttt{inv\_depth\_image}  $x$ and $y$ are iterated from the image size, and corresponding \texttt{pointsrgb} is set as \texttt{image[y, x]}. 
+
+\end{itemize}
+
+\end{document}
+
+

@@ -1,9 +1,9 @@
 """ CS4277/CS5477 Lab 4: Plane Sweep Stereo
 See accompanying Jupyter notebook (lab4.ipynb) for instructions.
 
-Name: Varun Venkatesh Narayanan
-Email: varun_vn@u.nus.edu
-NUSNET ID: e0787831
+Name: Zhang Rongqi
+Email: e1132299@u.nus.edu
+NUSNET ID: e1132299
 
 """
 import json
@@ -173,6 +173,15 @@ def get_plane_sweep_homographies(K, relative_pose, inv_depths):
     homographies = []
 
     """ YOUR CODE STARTS HERE """
+    R_T = relative_pose[:, :3]
+    C = R_T.T @ relative_pose[:, 3:] # why not negative? I'm confused.
+    n_T = np.array([[0, 0, 1]]) # fronto-parallel plane
+    K_inv = np.linalg.inv(K)
+    M = R_T @ C @ n_T
+    M = np.expand_dims(M, axis=0)
+    M = np.repeat(M, inv_depths.shape[0], axis=0)
+    M = np.einsum('dij,d->dij', M, inv_depths)
+    homographies = np.einsum('ij,djk,kl->dil', K, R_T + M, K_inv)
 
     """ YOUR CODE ENDS HERE """
 
@@ -211,10 +220,60 @@ def compute_plane_sweep_volume(images, ref_pose, K, inv_depths, img_hw):
     accum_count = np.zeros((D, H, W), dtype=np.int32)
 
     """ YOUR CODE STARTS HERE """
-    
+
+    homographies = np.zeros((len(images), D, 3, 3), dtype=np.float64)
+    ps_sum = np.zeros((D, H, W, 3), dtype=np.float64)
+    warped_images = np.zeros((len(images), D, H, W, 3), dtype=np.float64)
+    warped_maskes = np.zeros((len(images), D, H, W), dtype=np.float64)
+
+    for i in range(len(images)):
+        print(f'Processing image {i}')
+        relative_pose = concat_extrinsic_matrix(ref_pose, invert_extrinsic(images[i].pose_mat))
+        homographies[i] = get_plane_sweep_homographies(K, relative_pose, inv_depths)
+        for d in range(D):
+            warped_images[i, d] = cv2.warpPerspective(images[i].image, homographies[i, d], (W, H))
+            warped_maskes[i, d] = cv2.warpPerspective(np.ones((H, W), dtype=np.float64), homographies[i, d], (W, H))
+
+    ps_sum = np.sum(warped_images, axis=0)
+    accum_count[:] += np.sum(np.where(warped_maskes > 0, 1, 0), axis=0)
+
+    ps_sum /= accum_count[..., None]
+
+    for i in range(len(images)):
+        # Shouldn't count unmapped pixels! Debugging it cost me one day!
+        # cannot use vector operation here. It will cause OOM error.
+        ps_volume[:] += np.sum(np.where(np.expand_dims(warped_maskes[i, :] > 0, axis=-1), warped_images[i, :] - ps_sum[:], 0) ** 2, axis=3)
+
+    ps_volume /= accum_count * 3
+
+    # def print1(x, y):
+    #     filename = f'{x}_{y}.txt'
+    #     with open(filename, 'w') as f:
+    #         f.write("-------------------\n")
+    #         f.write(f"ps_sum: {ps_sum[:, y, x]}\n")
+    #         f.write(f"warped_images: {warped_images[:, 0, y, x]}\n")
+    #         f.write(f"warped_images: {warped_images[:, 1, y, x]}\n")
+    #         f.write(f"warped_maskes: {warped_maskes[:, 0, y, x]}\n")
+    #         f.write(f"warped_maskes: {warped_maskes[:, 1, y, x]}\n")
+    #
+    #         f.write(f"accum_count: {accum_count[:, y, x]}\n")
+    #         f.write(f"ps_volume: {ps_volume[:, y, x]}\n")
+    #         f.write(f"min_d: {np.argmin(ps_volume[:, y, x])}\n")
+    #         f.write(f"(warped_images[i, :, y, x] - ps_sum[:, y, x]): {(warped_images[i, :, y, x] - ps_sum[:, y, x])}\n")
+    #         f.write("-------------------\n")
+    #
+    # print1(20, 200)
+    # print1(300, 100)
+    #
+    # import matplotlib.pyplot as plt
+    # plt.figure(figsize=(12, 14))
+    # for d in range(D):
+    #     plt.subplot(D//2, 2, d + 1)
+    #     plt.imshow(accum_count[d].astype(np.uint8) / np.max(accum_count[d]), cmap='gray')
+    #     plt.title(f'{np.max(accum_count[d])}')
+
     """ YOUR CODE ENDS HERE """
     print(ps_volume.shape)
-
 
     return ps_volume, accum_count
 
@@ -236,6 +295,8 @@ def compute_depths(ps_volume, inv_depths):
     inv_depth_image = np.zeros(ps_volume.shape[1:], dtype=np.float64)
 
     """ YOUR CODE STARTS HERE """
+
+    inv_depth_image = inv_depths[np.argmin(ps_volume, axis=0)]
 
     """ YOUR CODE ENDS HERE """
 
@@ -262,10 +323,23 @@ def post_process(ps_volume, inv_depths, accum_count):
           Pixels with values TRUE indicate valid pixels.
     """
 
-    mask = np.ones(ps_volume.shape[1:], dtype=np.bool)
+    mask = np.ones(ps_volume.shape[1:], dtype=np.int32)
     inv_depth_image = np.zeros(ps_volume.shape[1:], dtype=np.float64)
     #print(accum_count)
     """ YOUR CODE STARTS HERE """
+
+    # should not smooth between different depths
+    smooth_ps_volume = scipy.ndimage.median_filter(ps_volume, size=(1, 5, 5))
+    variance_threshold = 0.001
+    accum_threshold = 0.5
+    idx = np.argmin(smooth_ps_volume, axis=0)
+    max_val = accum_count.max()
+    for h in range(ps_volume.shape[1]):
+        for w in range(ps_volume.shape[2]):
+            # cannot use vector operation here. It will cause OOM error.
+            if accum_count[idx[h, w], h, w] < max_val * accum_threshold or smooth_ps_volume[idx[h, w], h, w] > variance_threshold:
+                mask[h, w] = 0
+    inv_depth_image = inv_depths[idx]
 
     """ YOUR CODE ENDS HERE """
 
@@ -295,6 +369,20 @@ def unproject_depth_map(image, inv_depth_image, K, mask=None):
     rgb = np.zeros([0, 3], dtype=np.float64)  # values should be within (0, 1)
     H, W = image.shape[0:2]
     """ YOUR CODE STARTS HERE """
+
+    if mask is None:
+        # my numpy version is 1.21.6, which does not support np.bool. So I have to use np.int32
+        mask = np.ones_like(inv_depth_image, dtype=np.int32)
+    mask = mask.flatten()
+    mask_idx = np.where(mask > 0)
+    z = 1 / inv_depth_image
+    idx_x, idx_y = np.meshgrid(np.arange(W), np.arange(H), indexing='xy')
+    idx_x = idx_x.flatten()[mask_idx]
+    idx_y = idx_y.flatten()[mask_idx]
+    z = z[idx_y, idx_x]
+    X = np.stack([z * idx_x, z * idx_y, z], axis=-1)
+    points3d = (np.linalg.inv(K) @ X.T).T
+    pointsrgb = image[idx_y, idx_x]
 
     """ YOUR CODE ENDS HERE """
 
