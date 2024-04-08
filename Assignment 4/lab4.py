@@ -221,30 +221,62 @@ def compute_plane_sweep_volume(images, ref_pose, K, inv_depths, img_hw):
 
     """ YOUR CODE STARTS HERE """
 
-    homographies = np.zeros((len(images), D, 3, 3), dtype=np.float64)
-    ps_sum = np.zeros((D, H, W, 3), dtype=np.float64)
-    warped_images = np.zeros((len(images), D, H, W, 3), dtype=np.float64)
-    warped_maskes = np.zeros((len(images), D, H, W), dtype=np.float64)
+    kernel_size = 3
+    threshold = 1e-5
+    for i in range(len(images)):
+        if np.linalg.norm(images[i].pose_mat - ref_pose) < threshold:
+            ref_id = i
+            break
+    assert(ref_id != 0)
+    print(ref_id)
 
     for i in range(len(images)):
         print(f'Processing image {i}')
         relative_pose = concat_extrinsic_matrix(ref_pose, invert_extrinsic(images[i].pose_mat))
-        homographies[i] = get_plane_sweep_homographies(K, relative_pose, inv_depths)
+        homographies = get_plane_sweep_homographies(K, relative_pose, inv_depths)
+        # relative_pose = concat_extrinsic_matrix(images[i].pose_mat, invert_extrinsic(ref_pose))
+        # homographies[i] = get_plane_sweep_homographies(K, relative_pose, inv_depths)
         for d in range(D):
-            warped_images[i, d] = cv2.warpPerspective(images[i].image, homographies[i, d], (W, H))
-            warped_maskes[i, d] = cv2.warpPerspective(np.ones((H, W), dtype=np.float64), homographies[i, d], (W, H))
+            warped_image = cv2.warpPerspective(images[i].image, homographies[d], (W, H))
+            warped_mask = cv2.warpPerspective(np.ones((H, W), dtype=np.float64), homographies[d], (W, H))
 
-    ps_sum = np.sum(warped_images, axis=0)
-    accum_count[:] += np.sum(np.where(warped_maskes > 0, 1, 0), axis=0)
+            for dx in range(-kernel_size // 2, kernel_size // 2 + 1):
+                for dy in range(-kernel_size // 2, kernel_size // 2 + 1):
+                    x_indices = np.clip(np.arange(W) + dx, 0, W - 1)
+                    y_indices = np.clip(np.arange(H) + dy, 0, H - 1)
+                    valid_mask = warped_mask[y_indices][:, x_indices] != 0
+                    ps_volume[d] += np.sum(np.abs(images[ref_id].image[y_indices][:, x_indices] - warped_image[y_indices][:, x_indices]) * valid_mask[..., None], axis=-1)
+                    accum_count[d] += np.where(warped_mask[y_indices][:, x_indices] > 0, 1, 0)
 
-    ps_sum /= accum_count[..., None]
+    ps_volume /= accum_count
 
-    for i in range(len(images)):
-        # Shouldn't count unmapped pixels! Debugging it cost me one day!
-        # cannot use vector operation here. It will cause OOM error.
-        ps_volume[:] += np.sum(np.where(np.expand_dims(warped_maskes[i, :] > 0, axis=-1), warped_images[i, :] - ps_sum[:], 0) ** 2, axis=3)
+    # Following code is for compute 'variance'
 
-    ps_volume /= accum_count * 3
+    # homographies = np.zeros((len(images), D, 3, 3), dtype=np.float64)
+    # ps_sum = np.zeros((D, H, W, 3), dtype=np.float64)
+    # warped_images = np.zeros((len(images), D, H, W, 3), dtype=np.float64)
+    # warped_maskes = np.zeros((len(images), D, H, W), dtype=np.float64)
+    #
+    # for i in range(len(images)):
+    #     print(f'Processing image {i}')
+    #     relative_pose = concat_extrinsic_matrix(ref_pose, invert_extrinsic(images[i].pose_mat))
+    #     homographies[i] = get_plane_sweep_homographies(K, relative_pose, inv_depths)
+    #     for d in range(D):
+    #         warped_images[i, d] = cv2.warpPerspective(images[i].image, homographies[i, d], (W, H))
+    #         warped_maskes[i, d] = cv2.warpPerspective(np.ones((H, W), dtype=np.float64), homographies[i, d], (W, H))
+    #
+    # ps_sum = np.sum(warped_images, axis=0)
+    # accum_count[:] += np.sum(np.where(warped_maskes > 0, 1, 0), axis=0)
+    #
+    # ps_sum /= accum_count[..., None]
+    #
+    # for i in range(len(images)):
+    #     # Shouldn't count unmapped pixels! Debugging it cost me one day!
+    #     # cannot use vector operation here. It will cause OOM error.
+    #     ps_volume[:] += np.sum(np.where(np.expand_dims(warped_maskes[i, :] > 0, axis=-1), warped_images[i, :] - ps_sum[:], 0) ** 2, axis=3)
+    #
+    # ps_volume /= accum_count * 3
+
 
     # def print1(x, y):
     #     filename = f'{x}_{y}.txt'
@@ -328,16 +360,21 @@ def post_process(ps_volume, inv_depths, accum_count):
     #print(accum_count)
     """ YOUR CODE STARTS HERE """
 
-    # should not smooth between different depths
-    smooth_ps_volume = scipy.ndimage.median_filter(ps_volume, size=(1, 5, 5))
+
+    smooth_ps_volume = scipy.ndimage.median_filter(ps_volume, size=(3, 5, 5))
     variance_threshold = 0.001
     accum_threshold = 0.5
+    print(smooth_ps_volume.max(), smooth_ps_volume.min(), smooth_ps_volume.mean(), smooth_ps_volume.var())
+    ps_mean = np.mean(smooth_ps_volume, axis=(1, 2))
+    ps_var = np.var(smooth_ps_volume, axis=(1, 2))
+    print(accum_count.max(), accum_count.min(), accum_count.mean(), accum_count.var())
+    accum_mean = np.mean(accum_count, axis=(1, 2))
+    accum_var = np.var(accum_count, axis=(1, 2))
     idx = np.argmin(smooth_ps_volume, axis=0)
-    max_val = accum_count.max()
     for h in range(ps_volume.shape[1]):
         for w in range(ps_volume.shape[2]):
             # cannot use vector operation here. It will cause OOM error.
-            if accum_count[idx[h, w], h, w] < max_val * accum_threshold or smooth_ps_volume[idx[h, w], h, w] > variance_threshold:
+            if accum_count[idx[h, w], h, w] < accum_mean[idx[h, w]] - accum_var[idx[h, w]] or smooth_ps_volume[idx[h, w], h, w] > ps_mean[idx[h, w]] + ps_var[idx[h, w]]:
                 mask[h, w] = 0
     inv_depth_image = inv_depths[idx]
 
@@ -380,6 +417,7 @@ def unproject_depth_map(image, inv_depth_image, K, mask=None):
     idx_x = idx_x.flatten()[mask_idx]
     idx_y = idx_y.flatten()[mask_idx]
     z = z[idx_y, idx_x]
+    print(z.shape, idx_x.shape)
     X = np.stack([z * idx_x, z * idx_y, z], axis=-1)
     points3d = (np.linalg.inv(K) @ X.T).T
     pointsrgb = image[idx_y, idx_x]
